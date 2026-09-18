@@ -1,0 +1,151 @@
+name: siem-raw
+
+services:
+  wazuh.manager:
+    image: wazuh/wazuh-manager:${WAZUH_VERSION}
+    hostname: wazuh.manager
+    restart: always
+    ulimits:
+      memlock: { soft: -1, hard: -1 }
+      nofile: { soft: 655360, hard: 655360 }
+    ports:
+      - "1514:1514"      # agent registration/events (TCP)
+      - "1515:1515"      # authd - agent enrollment
+      - "514:514/udp"    # syslog tu firewall/switch/router
+      # Wazuh API. Port host doi tu 55000 -> 55500 vi Windows (WinNAT/Hyper-V) dat truoc
+      # dai 54997-55096 cho cap phat dong, khong bind duoc:
+      #   "listen tcp 0.0.0.0:55000: bind: An attempt was made to access a socket
+      #    in a way forbidden by its access permissions"
+      # Kiem tra: netsh interface ipv4 show excludedportrange protocol=tcp
+      # Port TRONG container van la 55000 - dashboard goi https://wazuh.manager:55000
+      # qua mang noi bo Docker nen khong anh huong.
+      - "55500:55000"
+    environment:
+      # Cho ossec.log ghi gio Viet Nam, de doi chieu khi go loi.
+      # LUU Y: bien nay KHONG anh huong toi rule co the <time> (100122). Da kiem chung:
+      # dat TZ va ghi de ca /etc/localtime, ossec.log chuyen sang +07 nhung <time> van
+      # so theo UTC, va alerts.log van dong dau UTC. Khung gio trong <time> phai tu tru
+      # 7 tieng - xem comment o rule 100122 trong custom/rules/local_rules.xml.
+      TZ: Asia/Ho_Chi_Minh
+      INDEXER_URL: https://wazuh.indexer:9200
+      INDEXER_USERNAME: ${INDEXER_USERNAME}
+      INDEXER_PASSWORD: ${INDEXER_PASSWORD}
+      FILEBEAT_SSL_VERIFICATION_MODE: full
+      SSL_CERTIFICATE_AUTHORITIES: /etc/ssl/root-ca.pem
+      SSL_CERTIFICATE: /etc/ssl/filebeat.pem
+      SSL_KEY: /etc/ssl/filebeat.key
+      API_USERNAME: ${API_USERNAME}
+      API_PASSWORD: ${API_PASSWORD}
+    volumes:
+      - wazuh_api_configuration:/var/ossec/api/configuration
+      - wazuh_etc:/var/ossec/etc
+      - wazuh_logs:/var/ossec/logs
+      - wazuh_queue:/var/ossec/queue
+      - wazuh_var_multigroups:/var/ossec/var/multigroups
+      - wazuh_integrations:/var/ossec/integrations
+      - wazuh_active_response:/var/ossec/active-response/bin
+      - wazuh_agentless:/var/ossec/agentless
+      - wazuh_wodles:/var/ossec/wodles
+      - filebeat_etc:/etc/filebeat
+      - filebeat_var:/var/lib/filebeat
+      - ./config/certs/root-ca-manager.pem:/etc/ssl/root-ca.pem:ro
+      - ./config/certs/wazuh.manager.pem:/etc/ssl/filebeat.pem:ro
+      - ./config/certs/wazuh.manager-key.pem:/etc/ssl/filebeat.key:ro
+      - ./config/wazuh_manager/ossec.conf:/wazuh-config-mount/etc/ossec.conf:ro
+      # Tat rate limit cua Wazuh API (mac dinh 300 req/phut) - xem comment trong file.
+      - ./config/wazuh_manager/api.yaml:/wazuh-config-mount/api/configuration/api.yaml:ro
+      # Custom decoder/rule - phan tu viet.
+      # BAT BUOC mount qua /wazuh-config-mount, KHONG mount thang vao /var/ossec/etc.
+      # /var/ossec/etc la named volume (wazuh_etc); bind-mount mot file vao trong do
+      # khien Docker tao san thu muc -> volume bi coi la "da co du lieu" -> khong copy
+      # noi dung goc tu image -> mat etc/shared/ar.conf, etc/lists/... -> analysisd chet
+      # voi loi "(1103): Could not open file 'etc/shared/ar.conf'".
+      # Script /etc/cont-init.d/0-wazuh-init chay `cp -r /wazuh-config-mount/* /var/ossec`
+      # nen file dat o day duoc chep dung vi tri luc khoi dong.
+      - ../../custom/decoders/local_decoder.xml:/wazuh-config-mount/etc/decoders/local_decoder.xml:ro
+      - ../../custom/rules/local_rules.xml:/wazuh-config-mount/etc/rules/local_rules.xml:ro
+
+  wazuh.indexer:
+    image: wazuh/wazuh-indexer:${WAZUH_VERSION}
+    hostname: wazuh.indexer
+    restart: always
+    ports:
+      - "9200:9200"
+    environment:
+      OPENSEARCH_JAVA_OPTS: "-Xms1g -Xmx1g"
+    ulimits:
+      memlock: { soft: -1, hard: -1 }
+      nofile: { soft: 65536, hard: 65536 }
+    volumes:
+      - wazuh-indexer-data:/var/lib/wazuh-indexer
+      - ./config/certs/root-ca.pem:/usr/share/wazuh-indexer/certs/root-ca.pem:ro
+      - ./config/certs/wazuh.indexer-key.pem:/usr/share/wazuh-indexer/certs/wazuh.indexer.key:ro
+      - ./config/certs/wazuh.indexer.pem:/usr/share/wazuh-indexer/certs/wazuh.indexer.pem:ro
+      - ./config/certs/admin.pem:/usr/share/wazuh-indexer/certs/admin.pem:ro
+      - ./config/certs/admin-key.pem:/usr/share/wazuh-indexer/certs/admin-key.pem:ro
+      - ./config/wazuh_indexer/wazuh.indexer.yml:/usr/share/wazuh-indexer/opensearch.yml:ro
+      - ./config/wazuh_indexer/internal_users.yml:/usr/share/wazuh-indexer/opensearch-security/internal_users.yml:ro
+
+  wazuh.dashboard:
+    image: wazuh/wazuh-dashboard:${WAZUH_VERSION}
+    hostname: wazuh.dashboard
+    restart: always
+    ports:
+      - "443:5601"
+    environment:
+      INDEXER_USERNAME: ${INDEXER_USERNAME}
+      INDEXER_PASSWORD: ${INDEXER_PASSWORD}
+      WAZUH_API_URL: https://wazuh.manager
+      DASHBOARD_USERNAME: ${DASHBOARD_USERNAME}
+      DASHBOARD_PASSWORD: ${DASHBOARD_PASSWORD}
+      API_USERNAME: ${API_USERNAME}
+      API_PASSWORD: ${API_PASSWORD}
+    volumes:
+      - ./config/certs/wazuh.dashboard.pem:/usr/share/wazuh-dashboard/certs/wazuh-dashboard.pem:ro
+      - ./config/certs/wazuh.dashboard-key.pem:/usr/share/wazuh-dashboard/certs/wazuh-dashboard-key.pem:ro
+      - ./config/certs/root-ca.pem:/usr/share/wazuh-dashboard/certs/root-ca.pem:ro
+      - ./config/wazuh_dashboard/opensearch_dashboards.yml:/usr/share/wazuh-dashboard/config/opensearch_dashboards.yml:ro
+      - ./config/wazuh_dashboard/wazuh.yml:/usr/share/wazuh-dashboard/data/wazuh/config/wazuh.yml
+      - wazuh-dashboard-config:/usr/share/wazuh-dashboard/data/wazuh/config
+      - wazuh-dashboard-custom:/usr/share/wazuh-dashboard/plugins/wazuh/public/assets/custom
+    depends_on:
+      - wazuh.indexer
+    links:
+      - wazuh.indexer:wazuh.indexer
+      - wazuh.manager:wazuh.manager
+
+  # Script correlation tu viet - doc alert tu Indexer, ghi alert tuong quan nguoc lai
+  correlator:
+    build:
+      context: ../../correlation
+    image: siem-raw/correlator:latest
+    hostname: correlator
+    restart: unless-stopped
+    environment:
+      INDEXER_URL: https://wazuh.indexer:9200
+      INDEXER_USERNAME: ${INDEXER_USERNAME}
+      INDEXER_PASSWORD: ${INDEXER_PASSWORD}
+      INDEXER_VERIFY_CERTS: "false"
+      RULES_PATH: /app/rules
+      POLL_INTERVAL: "60"
+      LOG_LEVEL: INFO
+    volumes:
+      - ../../correlation/rules:/app/rules:ro
+    depends_on:
+      - wazuh.indexer
+
+volumes:
+  wazuh_api_configuration:
+  wazuh_etc:
+  wazuh_logs:
+  wazuh_queue:
+  wazuh_var_multigroups:
+  wazuh_integrations:
+  wazuh_active_response:
+  wazuh_agentless:
+  wazuh_wodles:
+  filebeat_etc:
+  filebeat_var:
+  wazuh-indexer-data:
+  wazuh-dashboard-config:
+  wazuh-dashboard-custom:

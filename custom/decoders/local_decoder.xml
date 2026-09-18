@@ -1,0 +1,59 @@
+<!--
+  Custom decoder cho do an SIEM-raw.
+  Kich ban: doanh nghiep vua va nho co ung dung noi bo "erpapp" (quan ly ban hang/kho)
+  ghi log ra syslog. Log nay Wazuh khong hieu san -> phai tu viet decoder.
+
+  Dinh dang log mau (xem data/sample-logs/erpapp.log):
+    Aug 25 13:40:12 erp01 erpapp: AUTH result=FAILED user=nvhung srcip=192.168.10.24 reason=bad_password path=/api/login
+    Aug 25 13:41:55 erp01 erpapp: EXPORT rows=25000 module=customer user=nvhung srcip=192.168.10.24 file=khachhang.csv
+    Aug 25 13:42:03 erp01 erpapp: PERM action=grant role=admin target=ketoan1 user=nvhung srcip=192.168.10.24
+    Aug 25 13:43:19 erp01 erpapp: TXN action=update_price order=DH20260825 old=1200000 new=1000 user=nvhung srcip=192.168.10.24
+
+  LUU Y QUAN TRONG ve dat ten truong trong <order>:
+    Wazuh chia truong thanh hai loai.
+      - Truong tinh (static): srcip, dstuser, srcuser, url, status, id, action,
+        data, extra_data... Trong rule phai goi bang the rieng (<status>, <srcip>...)
+        va KHONG dung duoc <field name="...">. Neu co dung se bao loi
+        "Field 'extra_data' is static".
+      - Truong dong (dynamic): moi ten khac do minh tu dat. Trong rule goi bang
+        <field name="ten">, so sanh duoc bang bieu thuc.
+    Vi vay cac truong nghiep vu rieng cua ung dung deu dat tien to "erp." de thanh
+    truong dong. Tren Indexer chung nam o data.erp.* nen rule tuong quan tro toi
+    duoc bang duong dan day du.
+-->
+
+<decoder name="erpapp">
+  <program_name>^erpapp$</program_name>
+</decoder>
+
+<!-- Su kien dang nhap -->
+<decoder name="erpapp-auth">
+  <parent>erpapp</parent>
+  <prematch offset="after_parent">^AUTH </prematch>
+  <regex offset="after_parent">^AUTH result=(\w+) user=(\S+) srcip=(\S+) reason=(\S+) path=(\S+)</regex>
+  <order>status, dstuser, srcip, erp.reason, url</order>
+</decoder>
+
+<!-- Xuat du lieu hang loat: dau hieu ro ri du lieu khach hang -->
+<decoder name="erpapp-export">
+  <parent>erpapp</parent>
+  <prematch offset="after_parent">^EXPORT </prematch>
+  <regex offset="after_parent">^EXPORT rows=(\d+) module=(\w+) user=(\S+) srcip=(\S+) file=(\S+)</regex>
+  <order>erp.rows, erp.module, dstuser, srcip, erp.file</order>
+</decoder>
+
+<!-- Thay doi quyen: leo thang dac quyen trong ung dung -->
+<decoder name="erpapp-perm">
+  <parent>erpapp</parent>
+  <prematch offset="after_parent">^PERM </prematch>
+  <regex offset="after_parent">^PERM action=(\w+) role=(\w+) target=(\S+) user=(\S+) srcip=(\S+)</regex>
+  <order>erp.action, erp.role, dstuser, srcuser, srcip</order>
+</decoder>
+
+<!-- Giao dich nghiep vu: sua gia don hang (gian lan noi bo) -->
+<decoder name="erpapp-txn">
+  <parent>erpapp</parent>
+  <prematch offset="after_parent">^TXN </prematch>
+  <regex offset="after_parent">^TXN action=(\w+) order=(\S+) old=(\d+) new=(\d+) user=(\S+) srcip=(\S+)</regex>
+  <order>erp.action, erp.order, erp.old_price, erp.new_price, srcuser, srcip</order>
+</decoder>

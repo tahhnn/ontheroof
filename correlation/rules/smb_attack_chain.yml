@@ -1,0 +1,140 @@
+# Rule tuong quan - kich ban tan cong pho bien o doanh nghiep vua va nho.
+#
+# Cac truong dung trong filter la ten truong trong index wazuh-alerts-*:
+#   rule.id, rule.level, rule.groups, agent.name, data.srcip, data.dstuser,
+#   data.srcuser, data.status, data.url
+# Hau to __gte/__lte/__gt/__lt dich thanh range query.
+
+- id: brute_force_then_success
+  name: Brute force thanh cong - nghi ngo chiem doat tai khoan
+  type: sequence
+  severity: critical
+  window: 1800          # 30 phut
+  join_field: data.srcip
+  description: >
+    Mot dia chi IP do mat khau that bai nhieu lan roi dang nhap thanh cong ngay sau do.
+    Day la dau hieu tai khoan da bi chiem. Can khoa tai khoan va doi mat khau.
+  mitre: [T1110]
+  stages:
+    - name: do_mat_khau
+      filter:
+        rule.id: ["100120", "100121", "5710", "5712", "60122"]
+      min_count: 1
+    - name: dang_nhap_thanh_cong
+      filter:
+        rule.id: ["100110", "5715", "60106", "40112"]  # 40112 = Wazuh "fail roi success" (SSH that: 5715 khong phat, 40112 phat, co san data.srcip)
+      min_count: 1
+  summary: "IP {key}: do mat khau that bai nhieu lan roi dang nhap thanh cong"
+
+- id: account_takeover_to_exfil
+  name: Chiem tai khoan roi xuat du lieu
+  type: sequence
+  severity: critical
+  window: 3600          # 1 gio
+  join_field: data.dstuser
+  description: >
+    Cung mot tai khoan bi do mat khau, sau do dang nhap thanh cong va xuat du lieu
+    hang loat. Chuoi ba buoc nay khong the phat hien bang mot rule Wazuh don le
+    vi tran qua ba loai su kien khac nhau.
+  mitre: [T1110, T1078, T1567]
+  stages:
+    - name: bi_do_mat_khau
+      filter:
+        rule.id: ["100111"]
+      min_count: 3
+    - name: dang_nhap_thanh_cong
+      filter:
+        rule.id: ["100110"]
+      min_count: 1
+    - name: xuat_du_lieu
+      filter:
+        rule.id: ["100130", "100131"]
+      min_count: 1
+  summary: "Tai khoan {key}: bi do mat khau -> dang nhap thanh cong -> xuat du lieu"
+
+- id: impossible_travel
+  name: Mot tai khoan dang nhap tu nhieu IP khac nhau
+  type: distinct
+  severity: high
+  window: 900           # 15 phut
+  group_by: data.dstuser
+  distinct_field: data.srcip
+  min_cardinality: 3
+  filter:
+    rule.id: ["100110", "5715", "40112"]
+  description: >
+    Mot tai khoan dang nhap thanh cong tu tu 3 dia chi IP tro len trong 15 phut.
+    Thuong la tai khoan dung chung hoac thong tin dang nhap bi ro ri.
+  mitre: [T1078]
+  summary: "Tai khoan {key} dang nhap tu nhieu IP khac nhau trong 15 phut"
+
+- id: scan_then_login_attempt
+  name: Quet cong roi tan cong dang nhap
+  type: sequence
+  severity: high
+  window: 3600
+  join_field: data.srcip
+  description: >
+    IP bi firewall chan khi quet cong, sau do xuat hien trong log dang nhap.
+    Do thu tu recon -> khai thac cua chuoi tan cong.
+  mitre: [T1046, T1110]
+  stages:
+    - name: quet_cong
+      filter:
+        rule.id: ["100220"]
+      min_count: 1
+    - name: thu_dang_nhap
+      filter:
+        rule.id: ["100111", "100110", "5710", "5715", "40112"]
+      min_count: 1
+  summary: "IP {key}: quet cong roi chuyen sang tan cong dang nhap"
+
+- id: privilege_then_config_change
+  name: Cap quyen admin roi doi cau hinh he thong
+  type: sequence
+  severity: high
+  window: 7200          # 2 gio
+  join_field: agent.name
+  description: >
+    Tren cung mot may, co su kien cap quyen admin roi ngay sau do co thay doi
+    file cau hinh (FIM). Dau hieu leo thang dac quyen roi cam chot.
+  mitre: [T1078, T1543]
+  stages:
+    - name: cap_quyen_admin
+      filter:
+        rule.id: ["100140", "100141", "5402", "5403", "60112"]
+      min_count: 1
+    - name: doi_file_cau_hinh
+      filter:
+        rule.groups: "syscheck"
+      min_count: 1
+  summary: "May {key}: cap quyen admin roi thay doi file cau hinh"
+
+- id: noisy_agent_high_severity
+  name: Mot may sinh qua nhieu canh bao muc cao
+  type: threshold
+  severity: medium
+  window: 900
+  group_by: agent.name
+  min_count: 20
+  filter:
+    rule.level__gte: 10
+  description: >
+    Mot endpoint sinh tu 20 canh bao muc >= 10 tro len trong 15 phut. Co the may
+    da bi nhiem ma doc, hoac cau hinh sai gay nhieu (can tinh chinh rule).
+  summary: "May {key} sinh {count} canh bao muc cao trong 15 phut"
+
+- id: mass_data_export_by_user
+  name: Xuat du lieu lap di lap lai boi mot nguoi dung
+  type: threshold
+  severity: high
+  window: 1800
+  group_by: data.dstuser
+  min_count: 5
+  filter:
+    rule.id: ["100130", "100131"]
+  description: >
+    Mot tai khoan thuc hien tu 5 lan xuat du lieu nhay cam tro len trong 30 phut.
+    Dau hieu nhan vien lay du lieu khach hang truoc khi nghi viec.
+  mitre: [T1567]
+  summary: "Nguoi dung {key} xuat du lieu {count} lan trong 30 phut"

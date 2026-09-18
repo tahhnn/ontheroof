@@ -1,0 +1,11 @@
+# Sinh self-signed certs cho stack. Chay 1 lan truoc khi `docker compose up`.
+#   docker compose -f generate-certs.yml run --rm generator
+name: siem-raw-certs
+
+services:
+  generator:
+    image: wazuh/wazuh-certs-generator:0.0.2
+    hostname: wazuh-certs-generator
+    volumes:
+      - ./config/certs/:/certificates/
+      - ./config/certs.yml:/config/certs.yml:ro

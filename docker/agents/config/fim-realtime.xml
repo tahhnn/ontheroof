@@ -1,0 +1,4 @@
+<!-- Chen vao trong <syscheck> cua agent de FIM bao NGAY khi file cau hinh doi
+     (mac dinh Wazuh chi quet dinh ky moi 12h - qua cham cho demo).
+     Thu muc /etc/erpapp mo phong noi chua cau hinh ung dung ERP. -->
+<directories realtime="yes" check_all="yes" report_changes="yes">/etc/erpapp</directories>

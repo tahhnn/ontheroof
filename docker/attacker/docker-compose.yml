@@ -1,0 +1,21 @@
+name: siem-attacker
+
+# May tan cong gia lap. Chung mang voi stack SIEM de goi hostname erp01/fs01/pc01.
+#   docker compose -f docker/attacker/docker-compose.yml up -d --build
+#   docker exec -it attacker /opt/attack/full-attack.sh fs01
+
+services:
+  attacker:
+    build:
+      context: .
+    image: siem-raw/attacker:latest
+    container_name: attacker
+    hostname: attacker
+    restart: unless-stopped
+    networks:
+      - siem
+
+networks:
+  siem:
+    external: true
+    name: siem-raw_default

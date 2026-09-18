@@ -1,0 +1,83 @@
+name: siem-agents
+
+# 3 endpoint gia lap doanh nghiep SMB de cai Wazuh agent thu cong.
+# Chay SAU khi stack chinh (docker/single-node) da len, vi dung chung mang cua no.
+#
+#   docker compose -f docker/agents/docker-compose.yml up -d --build
+#
+# Vao tung may de cai agent:
+#   docker exec -it erp01 bash
+#   WAZUH_MANAGER='wazuh.manager' WAZUH_AGENT_NAME='erp01' dpkg -i /opt/wazuh-agent.deb
+#   /var/ossec/bin/wazuh-control start
+
+x-endpoint: &endpoint
+  build:
+    context: .
+    dockerfile: Dockerfile
+  image: siem-raw/endpoint:latest
+  restart: unless-stopped
+  # Wazuh agent doc /proc de kiem ke tien trinh; khong can privileged.
+  cap_add:
+    - SYS_PTRACE
+  volumes:
+    # Goi cai dat agent - nguoi dung tu chay dpkg -i de thay quy trinh onboarding.
+    - ../../wazuh-agent_4.9.2-1_amd64.deb:/opt/wazuh-agent.deb:ro
+  networks:
+    - siem
+
+services:
+  # May chu ung dung ERP - nguon log nghiep vu cho decoder erpapp
+  erp01:
+    <<: *endpoint
+    container_name: erp01
+    hostname: erp01
+    environment:
+      # Dong bo mui gio voi manager - rule co the <time> doi chieu gio he thong.
+      TZ: Asia/Ho_Chi_Minh
+      ENDPOINT_ROLE: app-server
+      APP_LOGGER: "on"
+    volumes:
+      - ../../wazuh-agent_4.9.2-1_amd64.deb:/opt/wazuh-agent.deb:ro
+      - erp01_ossec:/var/ossec
+      - erp01_logs:/var/log/erpapp
+
+  # May chu file noi bo - muc tieu quet/brute-force
+  fs01:
+    <<: *endpoint
+    container_name: fs01
+    hostname: fs01
+    environment:
+      # Dong bo mui gio voi manager - rule co the <time> doi chieu gio he thong.
+      TZ: Asia/Ho_Chi_Minh
+      ENDPOINT_ROLE: file-server
+      APP_LOGGER: "off"
+    volumes:
+      - ../../wazuh-agent_4.9.2-1_amd64.deb:/opt/wazuh-agent.deb:ro
+      - fs01_ossec:/var/ossec
+
+  # May tram nhan vien - dong thoi dung lam may nguon tan cong khi demo
+  pc01:
+    <<: *endpoint
+    container_name: pc01
+    hostname: pc01
+    environment:
+      # Dong bo mui gio voi manager - rule co the <time> doi chieu gio he thong.
+      TZ: Asia/Ho_Chi_Minh
+      ENDPOINT_ROLE: workstation
+      APP_LOGGER: "off"
+    volumes:
+      - ../../wazuh-agent_4.9.2-1_amd64.deb:/opt/wazuh-agent.deb:ro
+      - pc01_ossec:/var/ossec
+
+volumes:
+  erp01_ossec:
+  erp01_logs:
+  fs01_ossec:
+  pc01_ossec:
+
+networks:
+  siem:
+    # Mang do stack chinh tao ra (project name: siem-raw).
+    # Nho vay agent goi duoc hostname "wazuh.manager" qua DNS noi bo cua Docker.
+    external: true
+    name: siem-raw_default

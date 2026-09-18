@@ -1,0 +1,15 @@
+# Cau hinh Wazuh API cho lab mot node.
+#
+# Ly do co file nay: mac dinh API gioi han 300 request/phut. Luc stack vua khoi dong,
+# plugin Wazuh tren dashboard ban don authenticate + manager/info + users/me/policies
+# trong khi manager chua san sang, vuot nguong -> API tra 429 cho moi request ->
+# dashboard bao "Error getting the authorization token". Dashboard lai tu retry nen
+# vong lap tu nuoi, khong tu thoat duoc.
+#
+# max_request_per_minute: 0 = tat gioi han. Chi phu hop moi truong lab/do an.
+# Trien khai that nen de gia tri huu han (vi du 1000) de con chong lam dung API.
+
+access:
+  max_login_attempts: 50
+  block_time: 300
+  max_request_per_minute: 0

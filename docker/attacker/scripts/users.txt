@@ -1,0 +1,7 @@
+root
+ketoan1
+nvhung
+admin
+thukho2
+banhang3
+oracle

@@ -1,0 +1,249 @@
+<!--
+  Rule tu viet cho do an SIEM-raw. Dai ID 100000-100999 danh cho rule local.
+  Nhom rule chia theo kich ban tan cong thuong gap o SMB.
+-->
+
+<group name="erpapp,local,">
+
+  <!-- ===== Rule goc: bat moi su kien da duoc erpapp decoder xu ly ===== -->
+  <rule id="100100" level="0">
+    <decoded_as>erpapp</decoded_as>
+    <description>Su kien ung dung noi bo erpapp</description>
+  </rule>
+
+  <!--
+    Bat dong log erpapp dung verb da biet nhung KHONG decode duoc.
+    Khong co rule nay thi moi dong log sai dinh dang se roi ve 100100 (level 0)
+    => khong ghi alert, khong luu Indexer, khong ai biet la he thong da mu.
+    Cac ca da kiem chung bang wazuh-logtest deu fail-silent: thieu field, doi thu tu
+    field, gia tri co khoang trang (ten file, reason), rows khong phai so, thua dau cach.
+
+    LEVEL 2 LA BAT BUOC, khong phai tuy chon:
+    analysisd thu cac rule anh em theo LEVEL GIAM DAN (khong theo thu tu trong file).
+    De level 5 thi 100101 duoc thu truoc 100110 (level 3) va nuot het log dang nhap
+    hop le - da kiem chung. Level 2 dam bao no chi duoc thu sau moi rule decode duoc,
+    tuc chi khop khi that su khong rule nao khac khop.
+    Level 2 < <log_alert_level>3</log_alert_level> nen khong ghi alert, nhung van duoc
+    luu vao danh sach doi chieu tan suat cho 100102.
+  -->
+  <rule id="100101" level="2">
+    <if_sid>100100</if_sid>
+    <match>AUTH |EXPORT |PERM |TXN </match>
+    <description>erpapp: dong log khong decode duoc</description>
+    <group>decoder_error,</group>
+  </rule>
+
+  <!--
+    Chuong bao decoder hong. Doi format log lam hong ca mot loai su kien, nen loi
+    di theo cum chu khong le te - dem 5 dong/300s vua du nhay ma khong nhieu.
+  -->
+  <rule id="100102" level="7" frequency="5" timeframe="300">
+    <if_matched_sid>100101</if_matched_sid>
+    <description>erpapp: nhieu dong log khong decode duoc - format log da doi, decoder dang mu</description>
+    <group>decoder_error,</group>
+  </rule>
+
+  <!-- ===== Dang nhap ===== -->
+  <!--
+    Neo ^...$ la BAT BUOC, khong phai cho dep: <status>OK</status> khong neo la so khop
+    CHUOI CON, nen result=NOTOK / TOKEN_EXPIRED / BLOCKED deu khop rule "dang nhap thanh cong".
+    Hau qua: rule tuong quan brute_force_then_success va account_takeover_to_exfil lay 100110
+    lam chang "dang nhap thanh cong" => tan cong bi khoa tai khoan lai bi bao la da chiem duoc
+    tai khoan. Kiem chung: wazuh-logtest voi result=NOTOK phai roi ve 100100.
+  -->
+  <rule id="100110" level="3">
+    <if_sid>100100</if_sid>
+    <status>^OK$</status>
+    <description>erpapp: dang nhap thanh cong - user $(dstuser) tu $(srcip)</description>
+    <group>authentication_success,gdpr_IV_32.2,</group>
+  </rule>
+
+  <rule id="100111" level="5">
+    <if_sid>100100</if_sid>
+    <status>^FAILED$</status>
+    <description>erpapp: dang nhap that bai - user $(dstuser) tu $(srcip)</description>
+    <group>authentication_failed,gdpr_IV_35.7.d,</group>
+  </rule>
+
+  <!-- Brute force: >=6 lan that bai trong 120s tu cung 1 IP -->
+  <!--
+    <same_user /> la bat buoc, khong phai tuy chon: 100120 va 100121 cung nghe rule 100111,
+    ma analysisd dung ngay o rule dau tien khop => 100120 se an het su kien va 100121
+    (password spraying) khong bao gio nổ. Tach nguong ro rang:
+      brute force  = nhieu lan that bai tren CUNG mot tai khoan
+      spraying     = nhieu lan that bai tren NHIEU tai khoan khac nhau
+  -->
+  <rule id="100120" level="10" frequency="6" timeframe="120">
+    <if_matched_sid>100111</if_matched_sid>
+    <same_source_ip />
+    <same_user />
+    <description>erpapp: nghi ngo brute force - $(srcip) that bai nhieu lan lien tiep tren $(dstuser)</description>
+    <mitre>
+      <id>T1110</id>
+    </mitre>
+    <group>authentication_failures,attack,</group>
+  </rule>
+
+  <!-- Password spraying: 1 IP thu nhieu user khac nhau -->
+  <rule id="100121" level="10" frequency="8" timeframe="300">
+    <if_matched_sid>100111</if_matched_sid>
+    <same_source_ip />
+    <different_field>dstuser</different_field>
+    <description>erpapp: nghi ngo password spraying tu $(srcip)</description>
+    <mitre>
+      <id>T1110.003</id>
+    </mitre>
+    <group>authentication_failures,attack,</group>
+  </rule>
+
+  <!--
+    Dang nhap ngoai gio hanh chinh. Y dinh: 22:00 - 05:00 GIO VIET NAM.
+    Khung ghi o day la 15:00 - 22:00 vi <time> DOI CHIEU THEO UTC.
+
+    <time> KHONG doc timestamp trong log, va KHONG theo mui gio cua container.
+    Da thu ca TZ=Asia/Ho_Chi_Minh trong compose lan ghi de /etc/localtime: ossec.log
+    chuyen sang +07 nhung <time> van so theo UTC.
+
+    Kiem chung bang su kien that gui qua syslog UDP 514, luc UTC 04:2x / VN 11:2x:
+      <time>13:00 - 14:00</time>  -> 100122 IM,  ra 100110   (loai ca gio UTC lan gio VN)
+      <time>04:00 - 05:00</time>  -> 100122 NO              (trung gio UTC)
+      <time>15:00 - 22:00</time>  -> 100122 IM,  ra 100110   (dung: 11:2x VN la trong gio)
+
+    Truoc khi sua, khung <time>10 pm - 5 am</time> bat dung 09:00-12:00 gio VN, sinh
+    469 canh bao sai (toan bo alert 100122 do duoc deu roi vao 02-04h UTC).
+
+    DOI KHUNG GIO PHAI TRU 7 TIENG: gio VN mong muon - 7 = gio UTC ghi vao <time>.
+  -->
+  <rule id="100122" level="6">
+    <if_sid>100110</if_sid>
+    <time>15:00 - 22:00</time>
+    <description>erpapp: dang nhap ngoai gio lam viec - user $(dstuser) tu $(srcip)</description>
+    <group>anomaly,</group>
+  </rule>
+
+  <!-- ===== Ro ri du lieu ===== -->
+  <rule id="100130" level="5">
+    <if_sid>100100</if_sid>
+    <field name="erp.module">^customer$|^employee$|^payroll$</field>
+    <description>erpapp: xuat du lieu module nhay cam ($(erp.module)) boi $(dstuser)</description>
+    <group>data_export,</group>
+  </rule>
+
+  <!--
+    >=10000 dong trong 1 lan xuat.
+
+    Chu so dau phai khac 0: regex cu ^\d\d\d\d\d+$ chi dem SO CHU SO, nen rows=00012
+    (12 dong, app pad so 0) van khop va bao "xuat du lieu hang loat" muc 10.
+
+    BAT BUOC type="pcre2": os_regex mac dinh cua OSSEC KHONG ho tro lop ky tu [1-9].
+    Viet ^[1-9]\d\d\d\d+$ bang os_regex thi rule khong bao loi nap nhung KHONG BAO GIO
+    khop - rows=25000 tut xuong 100130, mat han canh bao muc 10. Da vap va da do.
+
+    Kiem chung bang wazuh-logtest:
+      rows=00012 -> 100130   rows=9999   -> 100130
+      rows=10000 -> 100131   rows=999999 -> 100131
+
+    Han che con lai: erp.rows luu dang chuoi tren Indexer nen tang tuong quan khong
+    dung duoc data.erp.rows__gte (range query tren text so sanh theo tu dien).
+  -->
+  <rule id="100131" level="10">
+    <if_sid>100130</if_sid>
+    <field name="erp.rows" type="pcre2">^[1-9][0-9]{4,}$</field>
+    <description>erpapp: xuat du lieu hang loat ($(erp.rows) dong) boi $(dstuser) tu $(srcip)</description>
+    <mitre>
+      <id>T1567</id>
+    </mitre>
+    <group>data_export,exfiltration,</group>
+  </rule>
+
+  <!-- ===== Leo thang dac quyen ===== -->
+  <rule id="100140" level="8">
+    <if_sid>100100</if_sid>
+    <field name="erp.action">^grant$</field>
+    <description>erpapp: cap quyen $(erp.role) cho $(dstuser) boi $(srcuser)</description>
+    <mitre>
+      <id>T1078</id>
+    </mitre>
+    <group>privilege_escalation,</group>
+  </rule>
+
+  <rule id="100141" level="12">
+    <if_sid>100140</if_sid>
+    <field name="erp.role">^admin$|^superadmin$</field>
+    <description>erpapp: CAP QUYEN ADMIN cho $(dstuser) boi $(srcuser) tu $(srcip)</description>
+    <group>privilege_escalation,</group>
+  </rule>
+
+  <!-- ===== Gian lan nghiep vu ===== -->
+  <rule id="100150" level="7">
+    <if_sid>100100</if_sid>
+    <field name="erp.action">^update_price$</field>
+    <description>erpapp: sua gia don hang $(erp.order) ($(erp.old_price) -> $(erp.new_price)) boi $(srcuser)</description>
+    <group>fraud,</group>
+  </rule>
+
+</group>
+
+
+<group name="syslog,firewall,local,">
+  <!--
+    Rule ap len log thiet bi mang gui syslog (router/firewall cua SMB).
+    Su dung decoder co san cua Wazuh, chi tinh chinh nguong cho phu hop quy mo nho.
+  -->
+  <!--
+    Level 2 chu KHONG phai 0: rule 100220 dem tan suat bang <if_matched_sid>100200</if_matched_sid>,
+    ma analysisd khong luu su kien cua rule level 0 vao danh sach de doi chieu tan suat
+    => de level 0 thi 100220 khong bao gio nổ.
+    Level 2 < log_alert_level (3) trong ossec.conf nen van khong ghi alert, khong gay nhieu.
+  -->
+  <rule id="100200" level="2">
+    <if_sid>4100</if_sid>
+    <description>Su kien firewall</description>
+  </rule>
+
+  <!-- Quet cong: 1 IP bi firewall chan nhieu lan trong thoi gian ngan -->
+  <rule id="100220" level="10" frequency="15" timeframe="60">
+    <if_matched_sid>100200</if_matched_sid>
+    <same_source_ip />
+    <description>Nghi ngo quet cong tu $(srcip)</description>
+    <mitre>
+      <id>T1046</id>
+    </mitre>
+    <group>recon,attack,</group>
+  </rule>
+</group>
+
+
+<group name="correlation,local,">
+  <!--
+    Rule tiep nhan alert do script correlation (correlation/) sinh ra va ban nguoc
+    vao manager qua socket /var/ossec/queue/sockets/queue voi location "siem-correlator".
+    Payload la JSON => dung decoder json san co cua Wazuh.
+  -->
+  <rule id="100900" level="0">
+    <decoded_as>json</decoded_as>
+    <field name="correlation_rule">\.+</field>
+    <description>Alert tuong quan tu SIEM correlator</description>
+  </rule>
+
+  <rule id="100901" level="10">
+    <if_sid>100900</if_sid>
+    <field name="severity">^medium$</field>
+    <description>Correlation [$(correlation_rule)]: $(summary)</description>
+    <group>correlation,</group>
+  </rule>
+
+  <rule id="100902" level="12">
+    <if_sid>100900</if_sid>
+    <field name="severity">^high$</field>
+    <description>Correlation [$(correlation_rule)]: $(summary)</description>
+    <group>correlation,</group>
+  </rule>
+
+  <rule id="100903" level="14">
+    <if_sid>100900</if_sid>
+    <field name="severity">^critical$</field>
+    <description>Correlation [$(correlation_rule)]: $(summary)</description>
+    <group>correlation,</group>
+  </rule>
+</group>

@@ -1,0 +1,25 @@
+# Chung chi TLS - chua khoa rieng, KHONG commit
+docker/single-node/config/certs/*
+!docker/single-node/config/certs/.gitkeep
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+
+config/certs/*
+
+# Du lieu runtime
+data/runtime/
+*.log
+!data/sample-logs/*.log
+
+# IDE / OS
+.vscode/
+.idea/
+Thumbs.db
+desktop.ini
+.claude
+*.deb

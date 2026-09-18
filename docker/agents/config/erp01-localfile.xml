@@ -1,0 +1,7 @@
+<!-- Doan cau hinh them vao /var/ossec/etc/ossec.conf cua agent erp01.
+     Cho logcollector doc log ung dung ERP; decoder erpapp o
+     custom/decoders/local_decoder.xml se phan tich cac dong nay. -->
+<localfile>
+  <log_format>syslog</log_format>
+  <location>/var/log/erpapp/app.log</location>
+</localfile>

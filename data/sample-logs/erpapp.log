@@ -1,0 +1,17 @@
+<13>Aug 25 13:49:31 erp01 erpapp: AUTH result=FAILED user=nvhung srcip=203.0.113.77 reason=bad_password path=/api/login
+<13>Aug 25 13:49:31 erp01 erpapp: AUTH result=FAILED user=nvhung srcip=203.0.113.77 reason=bad_password path=/api/login
+<13>Aug 25 13:49:31 erp01 erpapp: AUTH result=FAILED user=nvhung srcip=203.0.113.77 reason=bad_password path=/api/login
+<13>Aug 25 13:49:31 erp01 erpapp: AUTH result=FAILED user=nvhung srcip=203.0.113.77 reason=bad_password path=/api/login
+<13>Aug 25 13:49:31 erp01 erpapp: AUTH result=FAILED user=nvhung srcip=203.0.113.77 reason=bad_password path=/api/login
+<13>Aug 25 13:49:31 erp01 erpapp: AUTH result=FAILED user=nvhung srcip=203.0.113.77 reason=bad_password path=/api/login
+<13>Aug 25 13:49:31 erp01 erpapp: AUTH result=FAILED user=nvhung srcip=203.0.113.77 reason=bad_password path=/api/login
+<13>Aug 25 13:49:31 erp01 erpapp: AUTH result=FAILED user=nvhung srcip=203.0.113.77 reason=bad_password path=/api/login
+<13>Aug 25 13:49:31 erp01 erpapp: AUTH result=OK user=nvhung srcip=203.0.113.77 reason=none path=/api/login
+<13>Aug 25 13:49:31 erp01 erpapp: PERM action=grant role=admin target=nvhung user=nvhung srcip=203.0.113.77
+<13>Aug 25 13:49:31 erp01 erpapp: EXPORT rows=33724 module=customer user=nvhung srcip=203.0.113.77 file=customer.csv
+<13>Aug 25 13:49:31 erp01 erpapp: EXPORT rows=12850 module=customer user=nvhung srcip=203.0.113.77 file=customer.csv
+<13>Aug 25 13:49:31 erp01 erpapp: EXPORT rows=23522 module=customer user=nvhung srcip=203.0.113.77 file=customer.csv
+<13>Aug 25 13:49:31 erp01 erpapp: EXPORT rows=27840 module=customer user=nvhung srcip=203.0.113.77 file=customer.csv
+<13>Aug 25 13:49:31 erp01 erpapp: EXPORT rows=21405 module=customer user=nvhung srcip=203.0.113.77 file=customer.csv
+<13>Aug 25 13:49:31 erp01 erpapp: EXPORT rows=29090 module=customer user=nvhung srcip=203.0.113.77 file=customer.csv
+<13>Aug 25 13:49:31 erp01 erpapp: TXN action=update_price order=DH20260825903 old=1200000 new=1000 user=nvhung srcip=203.0.113.77
