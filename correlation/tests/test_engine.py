@@ -143,6 +143,67 @@ def test_doc_id_stable():
     print("[OK] doc_id tat dinh")
 
 
+def test_doc_id_stable_across_bucket_boundary():
+    """Hai lan quet nam hai ben moc chia o (06:00Z) van phai ra cung _id.
+
+    Tai hien bug that: su kien luc 05:36Z, quet luc 05:59Z va 06:05Z tung sinh
+    2 alert brute_force_then_success cho cung IP 198.51.100.9.
+    """
+    rules = {r.id: r for r in load_rules(RULES_DIR)}
+    rule = rules["brute_force_then_success"]  # window 1800 -> o doi luc :00 va :30
+
+    def bucket(key, first_ms, last_ms, count=1):
+        return {
+            "key": key,
+            "doc_count": count,
+            "first_seen": {"value": first_ms},
+            "last_seen": {"value": last_ms},
+        }
+
+    fail_ms = int(datetime(2026, 9, 30, 5, 36, 4, tzinfo=timezone.utc).timestamp() * 1000)
+    ok_ms = fail_ms + 16_000
+    ids = []
+    for now in (
+        datetime(2026, 9, 30, 5, 59, 20, tzinfo=timezone.utc),
+        datetime(2026, 9, 30, 6, 5, 21, tzinfo=timezone.utc),
+    ):
+        fake = FakeIndexer(
+            [
+                _terms([bucket("198.51.100.9", fail_ms, fail_ms + 14_000, 2)]),
+                _terms([bucket("198.51.100.9", ok_ms, ok_ms)]),
+            ]
+        )
+        finding = CorrelationEngine(fake, "wazuh-alerts-*").run(rule, now=now)[0]
+        ids.append(finding.doc_id)
+        assert finding.first_seen == datetime(2026, 9, 30, 5, 36, 4, tzinfo=timezone.utc)
+    assert ids[0] == ids[1], "quet qua moc chia o khong duoc sinh alert moi cho cung vu tan cong"
+    print("[OK] doc_id khong doi khi cua so truot qua moc chia o")
+
+
+def test_threshold_first_seen_from_agg():
+    rules = {r.id: r for r in load_rules(RULES_DIR)}
+    rule = rules["mass_data_export_by_user"]
+    first_ms = int(datetime(2026, 9, 30, 5, 36, 24, tzinfo=timezone.utc).timestamp() * 1000)
+    fake = FakeIndexer(
+        [
+            _terms(
+                [
+                    {
+                        "key": "nvhung",
+                        "doc_count": 6,
+                        "first_seen": {"value": first_ms},
+                        "sample": {"hits": {"hits": []}},
+                    }
+                ]
+            )
+        ]
+    )
+    finding = CorrelationEngine(fake, "wazuh-alerts-*").run(rule)[0]
+    assert "first_seen" in fake.bodies[0]["aggs"]["keys"]["aggs"]
+    assert finding.to_document()["first_seen"] == "2026-09-30T05:36:24+00:00"
+    print("[OK] threshold lay first_seen tu agg min @timestamp")
+
+
 if __name__ == "__main__":
     for name, fn in sorted(globals().items()):
         if name.startswith("test_") and callable(fn):
