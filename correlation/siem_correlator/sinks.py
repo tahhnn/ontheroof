@@ -12,7 +12,7 @@ from __future__ import annotations
 import json
 import logging
 import socket
-from datetime import datetime, timezone
+from datetime import timezone
 
 from .engine import Finding
 from .indexer import IndexerClient
@@ -37,6 +37,7 @@ INDEX_TEMPLATE = {
                 "window_seconds": {"type": "long"},
                 "window_start": {"type": "date"},
                 "window_end": {"type": "date"},
+                "first_seen": {"type": "date"},
                 "mitre_ids": {"type": "keyword"},
                 "source": {"type": "keyword"},
                 "evidence": {"type": "object", "enabled": False},
@@ -52,11 +53,13 @@ class IndexerSink:
         self.index_prefix = index_prefix
         self.client.ensure_index_template("siem-correlated", INDEX_TEMPLATE)
 
-    def _index_name(self) -> str:
-        return f"{self.index_prefix}-{datetime.now(timezone.utc):%Y.%m.%d}"
+    def _index_name(self, finding: Finding) -> str:
+        # Theo ngay cua su kien, khong theo ngay quet: vu tan cong luc 23:50 UTC
+        # quet lai sau 00:00 van ghi de vao cung index, khong sinh ban trung.
+        return f"{self.index_prefix}-{finding.anchor.astimezone(timezone.utc):%Y.%m.%d}"
 
     def emit(self, finding: Finding) -> None:
-        self.client.index_doc(self._index_name(), finding.doc_id, finding.to_document())
+        self.client.index_doc(self._index_name(finding), finding.doc_id, finding.to_document())
 
 
 class ManagerSink:

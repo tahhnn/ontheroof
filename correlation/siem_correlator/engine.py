@@ -30,11 +30,22 @@ class Finding:
     window_end: datetime
     count: int
     evidence: dict[str, Any] = field(default_factory=dict)
+    first_seen: datetime | None = None  # su kien som nhat trong finding
+
+    @property
+    def anchor(self) -> datetime:
+        """Moc thoi gian cua su kien, khong phai cua lan quet."""
+        return self.first_seen or self.window_end
 
     @property
     def doc_id(self) -> str:
-        """_id tat dinh: chay lai cung cua so thi ghi de, khong nhan ban alert."""
-        bucket = int(self.window_end.timestamp()) // max(self.rule.window, 1)
+        """_id tat dinh theo thoi diem su kien.
+
+        Neo theo window_end (gio quet) se sinh _id moi moi khi cua so truot qua moc
+        chia o -> mot vu tan cong ra 2 alert. Neo theo first_seen thi cac lan quet
+        sau van thay cung su kien som nhat -> cung _id -> ghi de.
+        """
+        bucket = int(self.anchor.timestamp()) // max(self.rule.window, 1)
         raw = f"{self.rule.id}|{self.key}|{bucket}"
         return hashlib.sha1(raw.encode()).hexdigest()
 
@@ -52,6 +63,7 @@ class Finding:
             "window_seconds": self.rule.window,
             "window_start": self.window_start.isoformat(),
             "window_end": self.window_end.isoformat(),
+            "first_seen": self.first_seen.isoformat() if self.first_seen else None,
             "mitre_ids": self.rule.mitre,
             "evidence": self.evidence,
             "source": "siem-correlator",
@@ -72,6 +84,10 @@ def _clause(field_name: str, value: Any) -> dict[str, Any]:
 
 def build_filter(filters: dict[str, Any]) -> list[dict[str, Any]]:
     return [_clause(k, v) for k, v in filters.items()]
+
+
+def _ms_to_dt(value: float | None) -> datetime | None:
+    return datetime.fromtimestamp(value / 1000, timezone.utc) if value else None
 
 
 def _time_range(start: datetime, end: datetime) -> dict[str, Any]:
@@ -96,6 +112,7 @@ class CorrelationEngine:
                         "min_doc_count": rule.min_count,
                     },
                     "aggs": {
+                        "first_seen": {"min": {"field": "@timestamp"}},
                         "sample": {
                             "top_hits": {
                                 "size": 3,
@@ -118,6 +135,7 @@ class CorrelationEngine:
                     window_end=end,
                     count=bucket["doc_count"],
                     evidence={"sample_alerts": [h["_source"] for h in hits]},
+                    first_seen=_ms_to_dt(bucket.get("first_seen", {}).get("value")),
                 )
             )
         return findings
@@ -130,7 +148,10 @@ class CorrelationEngine:
             "aggs": {
                 "keys": {
                     "terms": {"field": rule.group_by, "size": MAX_BUCKETS},
-                    "aggs": {"values": {"terms": {"field": rule.distinct_field, "size": 50}}},
+                    "aggs": {
+                        "first_seen": {"min": {"field": "@timestamp"}},
+                        "values": {"terms": {"field": rule.distinct_field, "size": 50}},
+                    },
                 }
             },
         }
@@ -148,6 +169,7 @@ class CorrelationEngine:
                     window_end=end,
                     count=bucket["doc_count"],
                     evidence={"distinct_values": values, "distinct_count": len(values)},
+                    first_seen=_ms_to_dt(bucket.get("first_seen", {}).get("value")),
                 )
             )
         return findings
@@ -207,6 +229,7 @@ class CorrelationEngine:
                     window_start=start,
                     window_end=end,
                     count=sum(t["count"] for t in timeline),
+                    first_seen=_ms_to_dt(timeline[0]["first"]),
                     evidence={
                         "stages": [
                             {
