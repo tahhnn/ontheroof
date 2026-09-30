@@ -46,16 +46,28 @@ POLL_INTERVAL = int(os.getenv("POLL_INTERVAL", "60"))
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
-# Kich ban -> rule tuong quan phai no. Lay tu bang EXPECTED trong simulate_attack.py.
+# Kich ban -> (rule tuong quan, entity) phai no. Lay tu bang EXPECTED trong simulate_attack.py,
+# entity theo gia tri mac dinh --srcip 203.0.113.77 / --user nvhung cua script do.
 # Chi liet ke kich ban co ky vong ve rule TUONG QUAN; kich ban chi sinh alert
 # Wazuh don le (bruteforce, spray, portscan) khong tinh vao Recall cua engine.
+#
+# Phai so ca entity, khong chi ten rule: correlator quet lai ca cua so moi chu ky va ghi de
+# finding cu voi @timestamp moi, nen finding mass_data_export_by_user cua kich ban exfil (nvhung)
+# van "moi" khi kich ban insider (ketoan1) chay sau do vai phut.
 SCENARIO_EXPECT = {
-    "exfil": ["mass_data_export_by_user"],
-    "scan-then-login": ["scan_then_login_attempt"],
-    "impossible-travel": ["impossible_travel"],
-    "insider": ["mass_data_export_by_user"],
-    "full": ["brute_force_then_success", "account_takeover_to_exfil"],
+    "exfil": [("mass_data_export_by_user", "nvhung")],
+    "scan-then-login": [("scan_then_login_attempt", "203.0.113.77")],
+    "impossible-travel": [("impossible_travel", "nvhung")],
+    "insider": [("mass_data_export_by_user", "ketoan1")],
+    "full": [
+        ("brute_force_then_success", "203.0.113.77"),
+        ("account_takeover_to_exfil", "nvhung"),
+    ],
 }
+
+
+def _label(pair: tuple[str, str]) -> str:
+    return f"{pair[0]} [{pair[1]}]"
 
 
 def session() -> requests.Session:
@@ -157,7 +169,7 @@ def measure_recall(s: requests.Session, delay: float, scenarios: list[str]) -> N
     for name in scenarios:
         expect = SCENARIO_EXPECT[name]
         print("\n" + "=" * 74)
-        print(f"KICH BAN: {name}   ky vong: {', '.join(expect)}")
+        print(f"KICH BAN: {name}   ky vong: {', '.join(_label(p) for p in expect)}")
         print("=" * 74)
 
         started = datetime.now(timezone.utc)
@@ -181,20 +193,20 @@ def measure_recall(s: requests.Session, delay: float, scenarios: list[str]) -> N
                 "query": {
                     "bool": {"filter": [{"range": {"@timestamp": {"gte": started.isoformat()}}}]}
                 },
-                "_source": ["correlation_rule", "severity", "summary"],
+                "_source": ["correlation_rule", "entity", "severity", "summary"],
             },
         )
-        fired = {h["_source"]["correlation_rule"] for h in res["hits"]["hits"]}
-        hit = [r for r in expect if r in fired]
-        miss = [r for r in expect if r not in fired]
+        fired = {(h["_source"]["correlation_rule"], str(h["_source"].get("entity"))) for h in res["hits"]["hits"]}
+        hit = [p for p in expect if p in fired]
+        miss = [p for p in expect if p not in fired]
 
-        for r in hit:
-            print(f"  [TP]  {r}")
-        for r in miss:
-            print(f"  [FN]  {r}  - KHONG no")
+        for p in hit:
+            print(f"  [TP]  {_label(p)}")
+        for p in miss:
+            print(f"  [FN]  {_label(p)}  - KHONG no")
         extra = fired - set(expect)
-        for r in sorted(extra):
-            print(f"  [?]   {r}  - no ngoai ky vong (co the do du lieu con lai tu lan truoc)")
+        for p in sorted(extra):
+            print(f"  [?]   {_label(p)}  - no ngoai ky vong (co the do du lieu con lai tu lan truoc)")
 
         results.append((name, expect, hit, not miss))
 
