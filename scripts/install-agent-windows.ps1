@@ -24,7 +24,10 @@ param(
   [string]$AgentGroup = 'default',
 
   # Duong dan goi MSI co san (cai offline); bo trong thi tu tai tu kho Wazuh
-  [string]$MsiPath = ''
+  [string]$MsiPath = '',
+
+  # Mat khau enroll - chi can khi manager bat <use_password>yes</use_password> (trien khai VPS)
+  [string]$RegistrationPassword = ''
 )
 
 $ErrorActionPreference = 'Stop'
@@ -68,6 +71,9 @@ $msiArgs = @(
   "WAZUH_AGENT_NAME=`"$AgentName`"",
   "WAZUH_AGENT_GROUP=`"$AgentGroup`""
 )
+if (-not [string]::IsNullOrEmpty($RegistrationPassword)) {
+  $msiArgs += "WAZUH_REGISTRATION_PASSWORD=`"$RegistrationPassword`""
+}
 $proc = Start-Process msiexec.exe -ArgumentList $msiArgs -Wait -PassThru
 if ($proc.ExitCode -ne 0) {
   Write-Error "msiexec tra ve ma loi $($proc.ExitCode). Xem log: msiexec /i ... /l*v install.log"

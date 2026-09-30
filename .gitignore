@@ -11,6 +11,10 @@ venv/
 
 config/certs/*
 
+# Chi sinh tren VPS (xem muc 9 docs/so-tay-van-hanh.md) - chua mat khau enroll
+docker/single-node/config/wazuh_manager/ossec.vps.conf
+docker/single-node/config/wazuh_manager/authd.pass
+
 # Du lieu runtime
 data/runtime/
 *.log

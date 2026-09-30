@@ -315,8 +315,10 @@ cửa sổ 30 phút–2 giờ, lệch 30 giây không ảnh hưởng; với chu�
 
 Bài học múi giờ ở README lưu ý 6 là chuyện khác hẳn: `<time>` của Wazuh **không đọc timestamp
 trong log và cũng không theo `TZ` của container**, luôn so theo UTC. Đó là lỗi cấu hình, không
-phải lỗi lệch đồng hồ; đã sửa bằng cách trừ 7 giờ khi ghi khung `<time>`, đổi 22:00–05:00 giờ VN
-thành `15:00 - 22:00`. [Đã kiểm chứng — rule 100122 trong `custom/rules/local_rules.xml`]
+phải lỗi lệch đồng hồ; đã sửa bằng cách trừ 7 giờ khi ghi khung `<time>`. [Đã kiểm chứng — probe
+syslog, comment rule 100122 trong `custom/rules/local_rules.xml`] Khung hiện tại: giờ làm T2–T6
+07:30–17:00 giờ VN, ngoài giờ tính từ 17:30 → 100122 (`weekdays`, `10:30 - 00:30`) + 100123
+(`weekends`). [Đã kiểm chứng 2026-09-28 — 5 probe syslog, bảng kết quả trong comment rule 100122]
 
 ### Câu 9 — Single-node cho SME
 
@@ -718,7 +720,7 @@ mại cũng vậy. Ngưỡng tĩnh luôn có thể né nếu biết giá trị. 
 |---|---|
 | `mass_data_export_by_user` | ngưỡng 5 lần/30 phút; nội gián làm 1 lần/ngày |
 | 100131 xuất hàng loạt | chỉ nổ nếu ≥ 10000 dòng; 1 báo cáo khách hàng thường ít hơn |
-| 100122 ngoài giờ | đăng nhập trong giờ hành chính |
+| 100122 / 100123 ngoài giờ | đăng nhập trong giờ hành chính |
 | `impossible_travel` | 1 IP duy nhất, đúng máy của mình |
 | `account_takeover_to_exfil` | không có giai đoạn dò mật khẩu |
 

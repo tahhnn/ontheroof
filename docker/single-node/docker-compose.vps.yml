@@ -1,0 +1,33 @@
+# Lop ghi de khi trien khai len VPS co IP public. KHONG dung tren laptop.
+# Bat bang cach them vao docker/single-node/.env tren VPS:
+#   COMPOSE_FILE=docker-compose.yml:docker-compose.vps.yml
+# Sau do moi lenh `docker compose` (ke ca scripts/deploy.sh) tu nap ca hai file.
+#
+# Ly do: Docker publish port bang chain iptables rieng (DOCKER), di TRUOC UFW.
+# `ufw deny 9200` KHONG chan duoc port Docker da publish ra 0.0.0.0.
+# Cach an toan la bind cac port quan tri vao 127.0.0.1, truy cap qua SSH tunnel.
+#
+# Can Docker Compose >= 2.24.4 de hieu the !override.
+
+services:
+  wazuh.manager:
+    ports: !override
+      # Hai port agent PHAI mo ra internet cho phuong an B (agent that o xa).
+      - "1514:1514"
+      - "1515:1515"
+      # Syslog UDP khong ma hoa - chi nhan tu chinh VPS (simulate_attack.py chay tren VPS).
+      - "127.0.0.1:514:514/udp"
+      - "127.0.0.1:55500:55000"
+    volumes:
+      # ossec.vps.conf = ossec.conf voi <use_password>yes</use_password>.
+      # Ca hai file duoi deu sinh tren VPS, da nam trong .gitignore.
+      - ./config/wazuh_manager/ossec.vps.conf:/wazuh-config-mount/etc/ossec.conf:ro
+      - ./config/wazuh_manager/authd.pass:/wazuh-config-mount/etc/authd.pass:ro
+
+  wazuh.indexer:
+    ports: !override
+      - "127.0.0.1:9200:9200"
+
+  wazuh.dashboard:
+    ports: !override
+      - "127.0.0.1:443:5601"

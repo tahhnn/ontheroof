@@ -155,7 +155,7 @@ VPN_IP = {s.user: VPN_POOL[i % len(VPN_POOL)]
 P_REMOTE_SESSION = 0.18
 
 # Tac vu chay dem cua chinh may chu - khong co nguoi dang nhap nen KHONG sinh
-# su kien AUTH (tranh rule 100122 "dang nhap ngoai gio" bao sai moi dem).
+# su kien AUTH (tranh rule 100122/100123 "dang nhap ngoai gio" bao sai moi dem).
 BATCH_USER = "svc_batch"
 BATCH_IP = "192.168.10.5"
 BATCH_HOUR, BATCH_MINUTE = 1, 5
@@ -179,43 +179,44 @@ FILE_STEMS = {
 # --------------------------------------------------------------------------
 # NHIP LAM VIEC - gio Viet Nam (container dat TZ=Asia/Ho_Chi_Minh)
 # --------------------------------------------------------------------------
+WORK_START, WORK_END = 7.5, 17.0              # 07:30 - 17:00 gio VN, T2 - T6
+
+
+def in_business_hours(dt: datetime) -> bool:
+    """Trong gio hanh chinh T2-T6 07:30-17:00 gio VN.
+
+    Rule 100122/100123 chi coi la ngoai gio tu 17:30 (cong 30 phut ra ve), nen
+    log nen dung o 17:00 van con dem 30 phut.
+    """
+    h = dt.hour + dt.minute / 60.0
+    return dt.weekday() < 5 and WORK_START <= h < WORK_END
+
+
 def activity(dt: datetime) -> float:
     """He so nhip lam viec trong [0, 1]. 0 = khong ai lam viec.
 
-    Tra ve 0 trong khung 21:00-07:00 nen log nen khong bao gio sinh su kien dang
-    nhap ban dem. Do la co y: rule 100122 doi chieu dong ho HE THONG (khung
-    15:00-22:00 UTC = 22:00-05:00 gio VN), nen mot lan dang nhap nen luc 3h sang
-    se thanh canh bao "dang nhap ngoai gio lam viec" hoan toan sai.
+    Tra ve 0 ngoai T2-T6 07:30-17:00 nen log nen khong bao gio sinh su kien dang
+    nhap ngoai gio. Do la co y: rule 100122/100123 doi chieu dong ho HE THONG va
+    coi moi luc ngoai T2-T6 07:30-17:30 (ke ca T7, CN) la ngoai gio, nen mot lan
+    dang nhap nen luc 18h hay sang T7 se thanh canh bao "dang nhap ngoai gio" sai.
     """
     if ALWAYS_BUSINESS:
         return 1.0
-
-    weekday = dt.weekday()                     # 0 = thu hai
-    if weekday == 6:                           # chu nhat - gan nhu khong ai vao
-        day = 0.04
-    elif weekday == 5:                         # thu bay - lam nua ngay
-        day = 0.25 if dt.hour < 12 else 0.08
-    else:
-        day = 1.0
+    if not in_business_hours(dt):
+        return 0.0
 
     h = dt.hour + dt.minute / 60.0
-    if 7.0 <= h < 8.0:
-        hour = 0.35                            # den som, mo may
-    elif 8.0 <= h < 11.5:
-        hour = 1.00                            # cao diem buoi sang
-    elif 11.5 <= h < 12.0:
-        hour = 0.55
-    elif 12.0 <= h < 13.25:
-        hour = 0.12                            # nghi trua
-    elif 13.25 <= h < 17.0:
-        hour = 0.95                            # cao diem buoi chieu
-    elif 17.0 <= h < 18.5:
-        hour = 0.40                            # ve dan
-    elif 18.5 <= h < 21.0:
-        hour = 0.10                            # lam them
-    else:
-        hour = 0.0                             # 21:00-07:00 khong co nguoi
-    return day * hour
+    if h < 8.0:
+        return 0.35                            # den som, mo may
+    if h < 11.5:
+        return 1.00                            # cao diem buoi sang
+    if h < 12.0:
+        return 0.55
+    if h < 13.25:
+        return 0.12                            # nghi trua
+    if h < 16.5:
+        return 0.95                            # cao diem buoi chieu
+    return 0.40                                # ve dan
 
 
 PEAK_SESSION_INTERVAL = 165.0   # giay giua hai phien dang nhap luc cao diem
@@ -421,7 +422,7 @@ class Sim:
         """Tac vu dem cua may chu: chot so, ket xuat bao cao, don chi muc.
 
         KHONG co AUTH: tac vu chay bang service account tren chinh may chu,
-        khong qua man hinh dang nhap. Nho vay ban dem khong sinh rule 100122.
+        khong qua man hinh dang nhap. Nho vay ban dem khong sinh rule 100122/100123.
         Module 'report' khong nam trong SENSITIVE_MODULES nen cung khong sinh
         rule 100130 - dem la khoang lang cua dashboard, dung nhu thuc te.
         """
@@ -544,7 +545,7 @@ def audit(days: int, show: bool) -> int:
         verbs[verb] += 1
         kv = dict(p.split("=", 1) for p in msg.split(" ")[1:] if "=" in p)
         if verb == "AUTH":
-            if not (5 <= dt.hour < 22):
+            if not in_business_hours(dt):
                 night_auth += 1
             if kv["result"] == "FAILED":
                 fails[kv["user"]].append(ts)
@@ -590,7 +591,7 @@ def audit(days: int, show: bool) -> int:
          _peak(sens, 1800) < 5),
         ("rule 100141 cap quyen admin", f"{bad_roles} dong", bad_roles == 0),
         ("rule 100122 dang nhap ngoai gio",
-         f"{night_auth} dong AUTH trong 22:00-05:00", night_auth == 0),
+         f"{night_auth} dong AUTH ngoai T2-T6 07:30-17:00", night_auth == 0),
     )
     failed = sum(0 if ok else 1 for _, _, ok in checks)
     for name, detail, ok in checks:
@@ -616,8 +617,8 @@ def main() -> int:
                         help="hat giong random de tai lap duoc")
     parser.add_argument("--always-business", action="store_true",
                         default=os.environ.get("APP_LOGGER_ALWAYS_BUSINESS") == "1",
-                        help="bo qua nhip ngay/dem. CANH BAO: chay ngoai khung 05:00-22:00 "
-                             "gio VN se sinh rule 100122 'dang nhap ngoai gio' vo nghia")
+                        help="bo qua nhip ngay/dem. CANH BAO: chay ngoai T2-T6 07:30-17:30 "
+                             "gio VN se sinh rule 100122/100123 'dang nhap ngoai gio' vo nghia")
     parser.add_argument("--audit", type=int, metavar="NGAY",
                         help="mo phong bang dong ho ao roi kiem tra hang rao, khong ghi log")
     parser.add_argument("--print", dest="show", action="store_true",

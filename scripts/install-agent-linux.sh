@@ -3,7 +3,7 @@
 # Theo muc 4.3.1 cua docs/bao-cao-trien-khai.md.
 #
 # Cach dung (chay bang sudo/root tren may can giam sat):
-#   sudo bash install-agent-linux.sh -m <IP-manager> [-n <ten-agent>] [-g <nhom>] [-p <file-goi>] [--erp]
+#   sudo bash install-agent-linux.sh -m <IP-manager> [-n <ten-agent>] [-g <nhom>] [-p <file-goi>] [-P <mat-khau-enroll>] [--erp]
 #
 # Vi du:
 #   sudo bash install-agent-linux.sh -m 192.168.1.10 -n pc01
@@ -19,6 +19,7 @@ MANAGER=""
 AGENT_NAME="$(hostname)"
 AGENT_GROUP="default"
 PKG_FILE=""
+REG_PASS=""   # mat khau enroll - chi can khi manager bat <use_password>yes</use_password> (VPS)
 ERP=0
 
 usage() {
@@ -32,6 +33,7 @@ while [ $# -gt 0 ]; do
     -n) AGENT_NAME="$2"; shift 2 ;;
     -g) AGENT_GROUP="$2"; shift 2 ;;
     -p) PKG_FILE="$2"; shift 2 ;;
+    -P) REG_PASS="$2"; shift 2 ;;
     --erp) ERP=1; shift ;;
     -h|--help) usage ;;
     *) echo "Tham so khong hop le: $1"; usage ;;
@@ -68,14 +70,15 @@ if [ -z "$PKG_FILE" ]; then
 fi
 [ -f "$PKG_FILE" ] || { echo "Khong tim thay file goi: $PKG_FILE"; exit 1; }
 
-# Cai dat — ba bien moi truong duoc goi doc va ghi thang vao ossec.conf
+# Cai dat — cac bien moi truong WAZUH_* duoc goi doc va ghi thang vao ossec.conf
 log "Cai agent (manager=$MANAGER, name=$AGENT_NAME, group=$AGENT_GROUP)"
+PKG_ENV=(WAZUH_MANAGER="$MANAGER" WAZUH_AGENT_NAME="$AGENT_NAME" WAZUH_AGENT_GROUP="$AGENT_GROUP")
+# Chi truyen bien mat khau khi co, de ban cai trong LAN (khong mat khau) giu nguyen hanh vi cu
+[ -n "$REG_PASS" ] && PKG_ENV+=(WAZUH_REGISTRATION_PASSWORD="$REG_PASS")
 if [ "$PKG_KIND" = "deb" ]; then
-  WAZUH_MANAGER="$MANAGER" WAZUH_AGENT_NAME="$AGENT_NAME" WAZUH_AGENT_GROUP="$AGENT_GROUP" \
-    dpkg -i "$PKG_FILE"
+  env "${PKG_ENV[@]}" dpkg -i "$PKG_FILE"
 else
-  WAZUH_MANAGER="$MANAGER" WAZUH_AGENT_NAME="$AGENT_NAME" WAZUH_AGENT_GROUP="$AGENT_GROUP" \
-    rpm -ihv "$PKG_FILE"
+  env "${PKG_ENV[@]}" rpm -ihv "$PKG_FILE"
 fi
 
 # May chu ERP: them khai bao doc log ung dung truoc the </ossec_config> cuoi cung

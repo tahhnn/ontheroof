@@ -124,7 +124,7 @@ Các rule chính:
 | 100110 / 100111 | 3 / 5 | Đăng nhập thành công / thất bại |
 | 100120 | 10 | Brute force (6 lần thất bại / 120s cùng IP) |
 | 100121 | 10 | Password spraying (1 IP thử nhiều tài khoản) |
-| 100122 | 6 | Đăng nhập ngoài giờ hành chính — khung `<time>` ghi theo **UTC**, xem lưu ý 6 |
+| 100122 / 100123 | 6 | Đăng nhập ngoài giờ hành chính (trước 07:30 / từ 17:30 T2–T6, cả ngày T7–CN, giờ VN) — `<time>`/`<weekday>` ghi theo **UTC**, xem lưu ý 6 |
 | 100130 / 100131 | 5 / 10 | Xuất dữ liệu nhạy cảm / xuất hàng loạt ≥ 10000 dòng |
 | 100140 / 100141 | 8 / 12 | Cấp quyền / cấp quyền **admin** |
 | 100150 | 7 | Sửa giá đơn hàng (gian lận nghiệp vụ) |
@@ -154,8 +154,13 @@ Bảy điểm đã vấp phải khi viết decoder/rule, đều đã sửa trong
    (12 dòng) vẫn bị báo "xuất dữ liệu hàng loạt" mức 10.
 6. **`<time>` so theo giờ UTC, không theo múi giờ container.** Đã thử cả `TZ` trong compose lẫn
    ghi đè `/etc/localtime`: `ossec.log` chuyển sang `+07` nhưng `<time>` vẫn dùng UTC. Khung giờ
-   phải tự trừ 7 tiếng — 22:00–05:00 giờ VN được ghi là `15:00 - 22:00`. Trước khi sửa, rule
-   100122 bắt đúng 09:00–12:00 giờ VN và đã sinh 469 cảnh báo sai.
+   phải tự trừ 7 tiếng. Trước khi trừ, rule 100122 bắt đúng 09:00–12:00 giờ VN và đã sinh 469
+   cảnh báo sai. `<weekday>` cũng theo UTC: 00:00–06:59 giờ VN thuộc ngày hôm trước theo UTC.
+   Giờ làm việc T2–T6 07:30–17:00 giờ VN, cộng 30 phút ra về → trong giờ = 07:30–17:30 giờ VN
+   = 00:30–10:30 UTC, nằm gọn trong **một** ngày UTC, nên thứ UTC trùng thứ VN trong giờ làm và
+   chỉ cần 2 rule: 100122 (`weekdays`, `10:30 - 00:30`)
+   và 100123 (`weekends`, cả ngày). Nếu giờ vào làm sớm hơn 07:00 giờ VN, khung sẽ vắt qua nửa
+   đêm UTC và phải tách rule theo ngày.
 7. **analysisd thử các rule anh em theo level giảm dần, không theo thứ tự trong file.** Rule
    bắt lỗi decoder 100101 phải để `level 2`; để level 5 thì nó được thử trước 100110 (level 3)
    và nuốt hết log đăng nhập hợp lệ.

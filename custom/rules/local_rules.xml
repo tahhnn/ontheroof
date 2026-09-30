@@ -25,8 +25,62 @@
     tuc chi khop khi that su khong rule nao khac khop.
     Level 2 < <log_alert_level>3</log_alert_level> nen khong ghi alert, nhung van duoc
     luu vao danh sach doi chieu tan suat cho 100102.
+
+    PHAI KIEM TRUONG VANG MAT, chi level 2 thoi la KHONG DU:
+    "Duoc thu sau cung" khong dong nghia "chi khop khi decode hong". Ban cu chi co
+    <match> nen nuot ca su kien decode TOT ma khong rule anh em nao nhan:
+      EXPORT module=product  -> 100130 doi ^customer$|^employee$|^payroll$, khong khop
+      PERM action khong phai cap admin, TXN khong phai sua gia -> tuong tu
+    Hau qua da do duoc: chay benign_traffic.py 1 phut da du 5 dong/300s de 100102
+    (level 7) no tren luu luong hoan toan lanh tinh => FP gia tao, Precision/F1 sai.
+
+    KHONG DUNG DUOC <field name="srcip">: srcip la truong TINH, analysisd tu choi nap
+    ruleset - "ERROR: Failure to read rule 100101. Field 'srcip' is static" - va
+    wazuh-analysisd chet han. Da vap.
+
+    KHONG DUNG DUOC negate="yes" de bat truong VANG MAT: da do bang wazuh-logtest,
+    dong "EXPORT rows=494 user=banhang2 file=product.csv" (regex con that bai, khong
+    co erp.* nao) van KHONG khop <field name="erp.module" negate="yes">. Trong Wazuh
+    4.9.2, truong khong ton tai thi rule khong khop du co negate. Hau qua neu dung
+    cach nay: moi dong hong deu im lang o 100100 level 0 - dung lai dung cai loi
+    fail-silent ma rule 100101 sinh ra de chong.
+
+    CACH DUNG - dao nguoc logic, chi dung phep thu truong CO MAT:
+    analysisd thu cac rule anh em theo LEVEL GIAM DAN. Dat bon rule "da decode tot"
+    o level 2 va rule "decode hong" o level 1, thi mot dong chi roi xuong 100101 khi
+    da truot HET moi rule nghiep vu (level 3-12) VA truot ca bon rule level 2, tuc
+    that su khong bóc duoc field nao. Level 1 < <log_alert_level>3</log_alert_level>
+    nen khong ghi alert, van duoc dem tan suat cho 100102.
   -->
-  <rule id="100101" level="2">
+  <rule id="100103" level="2">
+    <if_sid>100100</if_sid>
+    <match>AUTH </match>
+    <field name="erp.reason">\.+</field>
+    <description>erpapp: AUTH da decode - khong co gi bat thuong</description>
+  </rule>
+
+  <rule id="100104" level="2">
+    <if_sid>100100</if_sid>
+    <match>EXPORT </match>
+    <field name="erp.module">\.+</field>
+    <description>erpapp: EXPORT da decode - module khong nhay cam</description>
+  </rule>
+
+  <rule id="100105" level="2">
+    <if_sid>100100</if_sid>
+    <match>PERM </match>
+    <field name="erp.role">\.+</field>
+    <description>erpapp: PERM da decode - khong phai cap quyen dang chu y</description>
+  </rule>
+
+  <rule id="100106" level="2">
+    <if_sid>100100</if_sid>
+    <match>TXN </match>
+    <field name="erp.order">\.+</field>
+    <description>erpapp: TXN da decode - khong phai sua gia</description>
+  </rule>
+
+  <rule id="100101" level="1">
     <if_sid>100100</if_sid>
     <match>AUTH |EXPORT |PERM |TXN </match>
     <description>erpapp: dong log khong decode duoc</description>
@@ -97,26 +151,57 @@
   </rule>
 
   <!--
-    Dang nhap ngoai gio hanh chinh. Y dinh: 22:00 - 05:00 GIO VIET NAM.
-    Khung ghi o day la 15:00 - 22:00 vi <time> DOI CHIEU THEO UTC.
+    Dang nhap ngoai gio hanh chinh. Gio lam viec: T2 - T6, 07:30 - 17:00 GIO VIET NAM,
+    cong 30 phut ra ve -> NGOAI GIO = truoc 07:30 hoac tu 17:30, va ca ngay T7, CN.
 
-    <time> KHONG doc timestamp trong log, va KHONG theo mui gio cua container.
-    Da thu ca TZ=Asia/Ho_Chi_Minh trong compose lan ghi de /etc/localtime: ossec.log
-    chuyen sang +07 nhung <time> van so theo UTC.
+    <time> va <weekday> DOI CHIEU THEO UTC, khong theo mui gio container va KHONG
+    doc timestamp trong log. Da thu ca TZ=Asia/Ho_Chi_Minh trong compose lan ghi de
+    /etc/localtime: ossec.log chuyen sang +07 nhung <time> van so theo UTC.
 
     Kiem chung bang su kien that gui qua syslog UDP 514, luc UTC 04:2x / VN 11:2x:
       <time>13:00 - 14:00</time>  -> 100122 IM,  ra 100110   (loai ca gio UTC lan gio VN)
       <time>04:00 - 05:00</time>  -> 100122 NO              (trung gio UTC)
-      <time>15:00 - 22:00</time>  -> 100122 IM,  ra 100110   (dung: 11:2x VN la trong gio)
+    Truoc khi tru 7 tieng, khung <time>10 pm - 5 am</time> bat dung 09:00-12:00 gio VN,
+    sinh 469 canh bao sai (toan bo alert 100122 do duoc deu roi vao 02-04h UTC).
 
-    Truoc khi sua, khung <time>10 pm - 5 am</time> bat dung 09:00-12:00 gio VN, sinh
-    469 canh bao sai (toan bo alert 100122 do duoc deu roi vao 02-04h UTC).
+    Doi sang UTC: 07:30 - 17:30 VN = 00:30 - 10:30 UTC, CUNG MOT NGAY UTC (khong vat
+    qua nua dem UTC) nen thu trong tuan UTC trung thu trong tuan VN cho ca khung gio
+    lam viec. Nho vay chi can 2 rule, khong phai tach ranh gioi ngay:
+      100122  weekdays UTC, 10:30 - 00:30   (T2-T6 VN 17:30 -> 07:30 sang hom sau,
+                                             ke ca T7 00:00 - 07:00 VN = T6 17-24h UTC)
+      100123  weekends UTC, ca ngay         (T7 07:00 VN -> T2 07:00 VN)
+    Ghep lai = moi thoi diem nam ngoai T2-T6 07:30-17:30 gio VN.
+
+    Hai rule cung description vi 100123 gom ca T2 00:00 - 07:00 VN (= CN 17-24h UTC),
+    ghi "cuoi tuan" se sai nhan.
+
+    Kiem chung 2026-09-28 bang syslog UDP 514, luc T2 03:4x-03:5x UTC / 10:4x-10:5x VN
+    (sua tam rule trong container + wazuh-control restart, doc alerts.log):
+      rule that (10:30 - 00:30 weekdays / weekends)     -> 100110  (dung: trong gio)
+      100122 weekdays + <time>03:00 - 02:00</time>       -> 100122  (vat nua dem, chua gio)
+      100122 weekdays + <time>04:30 - 03:00</time>       -> 100110  (vat nua dem, loai gio)
+      100122 tuesday  + <time>03:00 - 02:00</time>       -> 100110  (<weekday> loc thu UTC)
+      100123 <weekday>monday</weekday>                   -> 100123  (thu UTC hien tai)
+    => "weekdays" + khung vat nua dem hoat dong, <weekday> theo thu UTC.
+
+    Chua kiem chung: moc cuoi cua <time> tinh bao gom hay loai tru (anh huong dung
+    phut 07:30 va 17:30 VN); tu khoa "weekends" moi thu am tinh (T2 khong no).
 
     DOI KHUNG GIO PHAI TRU 7 TIENG: gio VN mong muon - 7 = gio UTC ghi vao <time>.
+    Neu khung gio lam viec moi vat qua nua dem UTC (bat dau truoc 07:00 VN) thi thu
+    UTC khong con trung thu VN -> phai tach rule theo ngay.
   -->
   <rule id="100122" level="6">
     <if_sid>100110</if_sid>
-    <time>15:00 - 22:00</time>
+    <weekday>weekdays</weekday>
+    <time>10:30 - 00:30</time>
+    <description>erpapp: dang nhap ngoai gio lam viec - user $(dstuser) tu $(srcip)</description>
+    <group>anomaly,</group>
+  </rule>
+
+  <rule id="100123" level="6">
+    <if_sid>100110</if_sid>
+    <weekday>weekends</weekday>
     <description>erpapp: dang nhap ngoai gio lam viec - user $(dstuser) tu $(srcip)</description>
     <group>anomaly,</group>
   </rule>

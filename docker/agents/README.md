@@ -98,7 +98,7 @@ Cac tham so dieu chinh khi demo:
 |---------|---------|
 | `--rate 3` (`APP_LOGGER_RATE`) | tang nhip su kien x3 khi can du lieu nhanh |
 | `--seed 42` (`APP_LOGGER_SEED`) | tai lap dung chuoi log (dung khi so sanh truoc/sau) |
-| `--always-business` (`APP_LOGGER_ALWAYS_BUSINESS=1`) | bo qua nhip ngay/dem de thu luc dem. CANH BAO: chay trong khung 22:00-05:00 gio VN se sinh rule 100122 "dang nhap ngoai gio" khong dung y nghia |
+| `--always-business` (`APP_LOGGER_ALWAYS_BUSINESS=1`) | bo qua nhip ngay/dem de thu luc dem. CANH BAO: chay ngoai T2-T6 07:30-17:30 gio VN se sinh rule 100122/100123 "dang nhap ngoai gio" khong dung y nghia |
 
 ## 5. Sinh su kien de kiem thu
 

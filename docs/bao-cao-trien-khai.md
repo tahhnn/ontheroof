@@ -256,7 +256,7 @@ Một số luật tiêu biểu:
 |----|-----|-----------|
 | 100120 | 10 | Dò mật khẩu (brute force): 6 lần thất bại trong 120 giây từ cùng một IP |
 | 100121 | 10 | Rải mật khẩu (password spraying): một IP thử nhiều tài khoản khác nhau |
-| 100122 | 6 | Đăng nhập ngoài giờ hành chính |
+| 100122 / 100123 | 6 | Đăng nhập ngoài giờ hành chính (trước 07:30 / từ 17:30 T2–T6, cả ngày T7–CN) |
 | 100130 / 100131 | 5 / 10 | Xuất dữ liệu nhạy cảm / xuất hàng loạt từ 10000 dòng trở lên |
 | 100140 / 100141 | 8 / 12 | Cấp quyền / cấp quyền **quản trị** |
 | 100150 | 7 | Sửa giá đơn hàng (dấu hiệu gian lận nghiệp vụ) |
