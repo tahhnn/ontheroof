@@ -81,7 +81,7 @@ fi
 # ---------------------------------------------------------------------------
 step "3. So agent dang ket noi"
 
-AGENTS=$(curl_indexer -X POST "${INDEXER_URL}/wazuh-alerts-*/_search?ignore_unavailable=true" \
+AGENTS=$(curl_indexer -X POST "${INDEXER_URL}/wazuh-alerts-*/_search?ignore_unavailable=true&filter_path=aggregations.n.value" \
   -H 'Content-Type: application/json' \
   -d '{"size":0,"query":{"range":{"@timestamp":{"gte":"now-24h"}}},
        "aggs":{"n":{"cardinality":{"field":"agent.name"}}}}' 2>/dev/null \
