@@ -232,7 +232,12 @@ sudo fallocate -l 4G /swapfile && sudo chmod 600 /swapfile && sudo mkswap /swapf
 echo "/swapfile none swap sw 0 0" | sudo tee -a /etc/fstab
 
 # 4. Công cụ cho script đo
-sudo apt-get install -y git python3 python3-requests
+sudo apt-get install -y git python3 python3-requests python-is-python3   # measure_capacity.sh goi `python`
+
+# 5. Gioi han log container (mac dinh json-file khong xoay vong, chay 25 ngay se phinh)
+echo '{"log-driver":"json-file","log-opts":{"max-size":"50m","max-file":"3"}}' | sudo tee /etc/docker/daemon.json
+sudo systemctl restart docker      # chi ap dung cho container tao SAU lenh nay -> lam truoc deploy.sh
+timedatectl | grep synchronized     # phai "yes": lech gio lam sai cua so tuong quan va khung gio 100122
 ```
 
 Firewall **ở tầng nhà cung cấp** (security group / cloud firewall), không phải UFW:
@@ -375,7 +380,7 @@ Không gửi syslog của router nhà qua internet: UDP không mã hoá, IP ngu�
 |----------|----------|---------|
 | Enroll không mật khẩu bị từ chối | Cài agent trên một máy **không** truyền `-P` / `-RegistrationPassword` | Dòng lỗi trong `ossec.log` của agent và trong log `wazuh.manager` |
 | Mất kết nối rồi kết nối lại | Tắt mạng laptop 5 phút, tạo vài sự kiện (đăng nhập sai Windows), bật mạng lại | Thời điểm `agent_control -l` chuyển `Disconnected` → `Active`; sự kiện lúc mất mạng có về Indexer không *(agent có bộ đệm `<client_buffer>`, dung lượng mặc định cần tra tài liệu)* |
-| FP theo ngày | `nohup python3 scripts/benign_traffic.py --profile both --duration 259200 > benign.log 2>&1 &` (3 ngày), sau đó `python3 scripts/eval_detection.py --fp-window '<bat dau>' '<ket thuc>'` | FP đo thật trong 3 ngày, không ngoại suy từ 1 giờ. **Không** chạy kịch bản tấn công trong khoảng này |
+| FP theo ngày | Nền lành tính là `app-logger` chạy sẵn trong `erp01` (có nhịp ngày/đêm, đã qua `--audit 25`). Sau đó `python3 scripts/eval_detection.py --fp-window '<bat dau>' '<ket thuc>' --exclude-entity vps-host` | FP đo thật theo ngày, không ngoại suy từ 1 giờ. **Không** chạy kịch bản tấn công trong khoảng này. Không dùng `benign_traffic.py` cho phép đo dài: nó đổi IP ngẫu nhiên mỗi lần đăng nhập, 15 user đăng nhập vài chục giây một lần suốt 24/7 nên `impossible_travel` nổ liên tục — công cụ để tái hiện câu 14, không phải nền thực tế |
 
 Đo năng lực trên cấu hình cố định của VPS:
 
@@ -385,7 +390,28 @@ bash scripts/measure_capacity.sh --endpoints 50 --retention 90
 
 Ghi kèm cấu hình và giá thuê VPS vào báo cáo để có con số "N endpoint tốn X đồng/tháng".
 
-### 9.10 Ngày bảo vệ
+### 9.10 Chạy liên tục 25 ngày
+
+Chia thời gian để số FP không bị lẫn alert của kịch bản tấn công:
+
+| Giai đoạn | Việc | Ghi lại |
+|-----------|------|---------|
+| Ngày 0–1 | Deploy, cài agent, `eval_detection.py --recall`, chụp ảnh dashboard, `measure_capacity.sh` lần 1 | Recall + độ trễ, ảnh, giờ kết thúc kịch bản cuối |
+| Ngày 1 + 2 giờ → ngày 23 | **Chỉ nền** (`app-logger`, agent thật). Không tấn công, không tập demo | Đây là cửa sổ FP |
+| Ngày 23–25 | `--recall` lần 2 (hệ thống còn bắt được sau 3 tuần?), `measure_capacity.sh` lần 2, ảnh | So sánh với ngày 0–1 |
+
+Vì sao chờ 2 giờ: alert tương quan lấy `@timestamp` theo lần quét, rule có cửa sổ dài nhất (`privilege_then_config_change`) còn thấy sự kiện tấn công tới 7200 giây sau. Lỡ tấn công giữa chừng thì ghi giờ bắt đầu/kết thúc vào `data/results/attack-log.txt` và chia cửa sổ FP thành nhiều đoạn, cộng lại.
+
+Chụp sức khoẻ 30 phút một lần (RAM, đĩa, heap, số agent Active, `app-logger` còn sống, số alert, `RestartCount` từng container):
+
+```bash
+( crontab -l 2>/dev/null; echo "*/30 * * * * cd $HOME/SIEM-raw && bash scripts/health_snapshot.sh >/dev/null 2>&1" ) | crontab -
+tail -3 data/results/health.log      # kiểm tra mỗi ngày
+```
+
+Dấu hiệu phải xử lý ngay: `agents_active` giảm, `app_logger=0` (`app-logger` chết thì container vẫn sống vì `tail -f`; khởi động lại bằng `docker restart erp01`), `heap_pct` > 85, `disk` > 80%, `RestartCount` tăng. Không sao lưu thì một lần hỏng volume mất cả đợt đo: chép `data/results/` và xuất số liệu chính về laptop mỗi tuần.
+
+### 9.11 Ngày bảo vệ
 
 - Giữ bản local trên laptop chạy được (không có `COMPOSE_FILE` trong `.env`) để dự phòng mất mạng.
 - Kiểm tra SSH tunnel và `agent_control -l` trước giờ bảo vệ 30 phút.

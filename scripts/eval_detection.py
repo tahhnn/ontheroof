@@ -99,14 +99,18 @@ def parse_ts(raw: str) -> str:
 # ---------- do false positive ----------
 
 
-def count_fp(s: requests.Session, start: str, end: str) -> int:
+def count_fp(s: requests.Session, start: str, end: str, exclude: list[str] | None = None) -> int:
     """Dem alert tuong quan trong khoang thoi gian chi co luu luong lanh tinh.
 
     MOI alert trong khoang nay deu la duong tinh gia theo dinh nghia.
     """
     body = {
         "size": 0,
-        "query": {"bool": {"filter": [{"range": {"@timestamp": {"gte": start, "lt": end}}}]}},
+        "query": {"bool": {
+            "filter": [{"range": {"@timestamp": {"gte": start, "lt": end}}}],
+            # Vd. vps-host: alert cua no la tan cong that tu internet, khong phai FP.
+            "must_not": [{"terms": {"entity": exclude}}] if exclude else [],
+        }},
         "aggs": {
             "theo_rule": {
                 "terms": {"field": "correlation_rule", "size": 20},
@@ -120,7 +124,7 @@ def count_fp(s: requests.Session, start: str, end: str) -> int:
     aggs = res.get("aggregations", {})
 
     print(f"\nKhoang do: {start}  ->  {end}")
-    print(f"Tong alert tuong quan: {total}")
+    print(f"Tong alert tuong quan: {total}" + (f"  (da loai entity: {', '.join(exclude)})" if exclude else ""))
     print("Moi alert trong khoang nay deu la DUONG TINH GIA (khong co tan cong).\n")
 
     buckets = aggs.get("theo_rule", {}).get("buckets", [])
@@ -280,6 +284,8 @@ def main() -> int:
                         help="dem FP trong khoang thoi gian (ISO hoac 'now-1h')")
     parser.add_argument("--count-window", nargs=2, metavar=("BAT_DAU", "KET_THUC"),
                         help="dem alert trong khoang (dung cho tinh huong B)")
+    parser.add_argument("--exclude-entity", action="append", default=[], metavar="ENTITY",
+                        help="bo entity nay khoi --fp-window (lap lai duoc), vd. vps-host")
     parser.add_argument("--recall", action="store_true", help="chay cac kich ban va do Recall")
     parser.add_argument("--delay", type=float, default=0.3,
                         help="--delay truyen cho simulate_attack.py (giu <= 1.0)")
@@ -306,7 +312,7 @@ def main() -> int:
 
     if args.fp_window or args.count_window:
         window = args.fp_window or args.count_window
-        n = count_fp(s, parse_ts(window[0]), parse_ts(window[1]))
+        n = count_fp(s, parse_ts(window[0]), parse_ts(window[1]), args.exclude_entity)
         if args.fp_window:
             hours = 0.0
             if not window[0].startswith("now"):
