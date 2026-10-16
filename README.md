@@ -89,6 +89,8 @@ docker exec siem-raw-wazuh.indexer-1 bash -c 'export JAVA_HOME=/usr/share/wazuh-
 
 Truy cập `https://localhost` — tài khoản `admin` / `SecretPassword`.
 
+Triển khai lên VPS chạy liên tục (đợt đo 25 ngày): làm theo [docs/runbook-deploy.md](docs/runbook-deploy.md).
+
 > **Đổi mật khẩu trước khi dùng thật.** Mật khẩu mặc định nằm trong `docker/single-node/.env` và hash bcrypt trong `config/wazuh_indexer/internal_users.yml`. Sinh hash mới bằng công cụ `hash.sh` của plugin security trong container indexer.
 
 ---

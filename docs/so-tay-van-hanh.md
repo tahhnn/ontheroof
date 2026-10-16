@@ -163,6 +163,8 @@ Vì vậy các trường nghiệp vụ riêng của ứng dụng trong `local_de
 ## 9. Triển khai lên VPS (phương án A + B)
 
 > Trạng thái: **chưa chạy thử trên VPS thật**. Các bước dưới đây được soạn dựa trên cấu hình trong repo. Đã kiểm chứng trên Windows bằng `docker compose config` rằng lớp ghi đè `docker-compose.vps.yml` bind port đúng như mô tả. Những chỗ ghi *(chưa kiểm chứng)* phải xác nhận lại khi chạy thật; lỗi mới gặp thì ghi vào mục 8.
+>
+> Thứ tự thao tác kèm kết quả mong đợi và nhật ký triển khai: [runbook-deploy.md](runbook-deploy.md). Mục này giữ phần giải thích.
 
 ### 9.1 Hai phương án và mục đích đo
 
