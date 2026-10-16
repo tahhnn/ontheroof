@@ -280,6 +280,7 @@ python3 scripts/eval_detection.py --report --tp <TP> --fn <FN> --fp <FP> --hours
 ```
 
 - K5. Kéo `data/results/` về laptop (lệnh `scp` ở mục 9), commit vào repo.
+- K5b. Trên laptop: `pip install matplotlib` rồi `python scripts/plot_health.py` → `data/results/health.png` (RAM, heap, disk, alert tích luỹ, alert/ngày) và bảng độ sẵn sàng, khoảng `app_logger=0`, agent giảm, lần restart in ra stdout (`| tee data/results/health-summary.txt`); thử trước bằng `--selftest`.
 - K6. Ghi vào báo cáo kèm **điều kiện đo**: FP đo trên log nền do chính đồ án sinh ra (`app-logger`), Recall đo trên kịch bản do chính đồ án viết; 3 endpoint, không phải quy mô SMB thật; số cho 50 endpoint là ngoại suy.
 - K7. Giữ stack chạy tới ngày bảo vệ nếu còn dùng để demo; nếu không thì `crontab -r` (xoá **toàn bộ** crontab của user, kiểm tra `crontab -l` trước) và dừng stack.
 
